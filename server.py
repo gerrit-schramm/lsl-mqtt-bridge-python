@@ -1,11 +1,10 @@
 import time
 from paho.mqtt import client as mqtt_client
-from pylsl import StreamInlet, resolve_stream
+from pylsl import StreamInlet, resolve_streams
 
 broker = 'localhost'
 port = 1883
-topic = "test/python/mqtt"
-client_id = f'python-mqtt-client'
+client_id = f'python-lsl-mqtt-bridge'
 
 def connect_mqtt():
     def on_connect(client, userdata, flags, rc):
@@ -20,30 +19,43 @@ def connect_mqtt():
     client.connect(broker, port)
     return client
 
-def publish(client):
-     msg_count = 0
-     while True:
-         time.sleep(1)
-         msg = f"messages: {msg_count}"
-         result = client.publish(topic, msg)
-         # result: [0, 1]
-         status = result[0]
-         if status == 0:
-             print(f"Send `{msg}` to topic `{topic}`")
-         else:
-             print(f"Failed to send message to topic {topic}")
-         msg_count += 1
+def publish(client, topic, message):
+    result = client.publish(topic, message)
+    status = result[0]
+    if status == 0:
+        pass
+        #print(f"Send `{message}` to topic `{topic}`")
+    else:
+        print(f"Failed to send message to topic {topic}")
 
-def subscribe(client: mqtt_client):
+""" def subscribe(client: mqtt_client):
     def on_message(client, userdata, msg):
         print(f"Received `{msg.payload.decode()}` from `{msg.topic}` topic")
     client.subscribe(topic)
-    client.on_message = on_message
+    client.on_message = on_message """
 
 def run():
     client = connect_mqtt()
     client.loop_start()
-    publish(client)
+    while True:
+        # looking for streams
+        streams = list(resolve_streams(0.5))
+        for streamnum in range(len(streams)):
+            print(" ", streamnum,
+                streams[streamnum].name().ljust(40),
+                streams[streamnum].type().ljust(15),
+                streams[streamnum].hostname())
+        if (len(streams) >= 1):
+            topic = f"test/lsl/{streams[0].hostname()}/{streams[0].type().strip()}/{streams[0].name().replace(' ','')}"
+            inlet = StreamInlet(streams[int(0)])
+            break
+    while True:
+        sample, timestamp = inlet.pull_sample(timeout=0.0)
+        if sample is None:
+            pass
+        else:
+            #print(str(sample))
+            publish(client, topic, str(sample))
 
 if __name__ == '__main__':
     run()
